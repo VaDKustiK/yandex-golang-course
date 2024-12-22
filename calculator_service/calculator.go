@@ -2,7 +2,6 @@ package main
 
 import (
 	"errors"
-	"fmt"
 	"strconv"
 	"strings"
 )
@@ -82,7 +81,6 @@ func precedence(op rune) int {
 	if op == '+' || op == '-' {
 		return 1
 	}
-
 	if op == '*' || op == '/' {
 		return 2
 	}
@@ -118,13 +116,4 @@ func isDigit(char rune) bool {
 
 func isOperator(char rune) bool {
 	return char == '+' || char == '-' || char == '*' || char == '/'
-}
-
-func main() {
-	result, err := Calc("(300 - 200) + (2 * 100 - 100) / 0.88")
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-	fmt.Println(result)
 }
