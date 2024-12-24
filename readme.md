@@ -79,11 +79,11 @@ cd yandex-golang-course/calculator_service
 
 2. Установи все зависимости
 ```
-go mod tidy
+go mod init github.com/VaDKustiK/yandex-golang-course
 ```
 
 3. Запускай
 ```
-go run main.go
+go run .
 ```
 Это запустит сервер на порте 8080.
