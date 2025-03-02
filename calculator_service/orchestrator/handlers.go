@@ -11,7 +11,6 @@ import (
 	"github.com/VaDKustiK/yandex-golang-course/calculator_service/common"
 )
 
-// Глобальные переменные для хранения выражений и задач.
 var (
 	expressionsMu sync.Mutex
 	tasksMu       sync.Mutex
@@ -23,7 +22,6 @@ var (
 	nextTaskID = 1
 )
 
-// AddExpressionHandler обрабатывает POST /api/v1/calculate.
 func AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, `{"error": "method not allowed"}`, http.StatusMethodNotAllowed)
@@ -40,7 +38,6 @@ func AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Создаём новую запись выражения.
 	expressionsMu.Lock()
 	exprID := nextExprID
 	nextExprID++
@@ -53,7 +50,6 @@ func AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
 	expressions[exprID] = expr
 	expressionsMu.Unlock()
 
-	// Разбиваем выражение на токены (ожидается формат: число оператор число …).
 	tokens := common.Tokenize(exprStr)
 	if len(tokens) < 3 {
 		http.Error(w, `{"error": "expression is too short"}`, http.StatusUnprocessableEntity)
@@ -74,7 +70,6 @@ func AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Для каждой операции создаём задачу.
 	tasksMu.Lock()
 	for i, op := range ops {
 		opTime := getOperationTime(op)
@@ -93,7 +88,6 @@ func AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	tasksMu.Unlock()
 
-	// Обновляем статус выражения.
 	expressionsMu.Lock()
 	expr.Status = "in_progress"
 	expressionsMu.Unlock()
@@ -102,13 +96,11 @@ func AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]int{"id": exprID})
 }
 
-// ListExpressionsHandler обрабатывает GET /api/v1/expressions.
 func ListExpressionsHandler(w http.ResponseWriter, r *http.Request) {
 	expressionsMu.Lock()
 	defer expressionsMu.Unlock()
 	var list []common.Expression
 	for _, expr := range expressions {
-		// Если все задачи выполнены, обновляем статус.
 		if expr.Status != "completed" {
 			allDone := true
 			var final float64
@@ -132,7 +124,6 @@ func ListExpressionsHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string][]common.Expression{"expressions": list})
 }
 
-// GetExpressionHandler обрабатывает GET /api/v1/expressions/{id}.
 func GetExpressionHandler(w http.ResponseWriter, r *http.Request) {
 	idStr := strings.TrimPrefix(r.URL.Path, "/api/v1/expressions/")
 	exprID, err := strconv.Atoi(idStr)
@@ -147,7 +138,6 @@ func GetExpressionHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error": "expression not found"}`, http.StatusNotFound)
 		return
 	}
-	// Если задачи завершены, вычисляем итоговый результат.
 	if expr.Status != "completed" {
 		allDone := true
 		var final float64
@@ -169,7 +159,6 @@ func GetExpressionHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]*common.Expression{"expression": expr})
 }
 
-// InternalTaskHandler обрабатывает эндпоинт /internal/task для GET и POST.
 func InternalTaskHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodGet {
 		getTask(w, r)
@@ -216,7 +205,6 @@ func postTaskResult(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
-// getOperationTime возвращает время выполнения операции (в мс) из переменных окружения.
 func getOperationTime(op string) int {
 	var envVar string
 	switch op {

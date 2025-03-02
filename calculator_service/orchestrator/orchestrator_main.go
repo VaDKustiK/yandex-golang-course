@@ -7,7 +7,7 @@ import (
 )
 
 func main() {
-	// Регистрируем эндпоинты, объявленные в handlers.go.
+	//эндпоинты  в handlers.go.
 	http.HandleFunc("/api/v1/calculate", AddExpressionHandler)
 	http.HandleFunc("/api/v1/expressions", ListExpressionsHandler)
 	http.HandleFunc("/api/v1/expressions/", GetExpressionHandler)

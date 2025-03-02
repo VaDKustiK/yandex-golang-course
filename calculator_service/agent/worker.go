@@ -13,7 +13,6 @@ import (
 	"github.com/VaDKustiK/yandex-golang-course/calculator_service/common"
 )
 
-// RunAgent запускает рабочих (воркеры) агента.
 func RunAgent() {
 	cpStr := os.Getenv("COMPUTING_POWER")
 	cp, err := strconv.Atoi(cpStr)
@@ -24,7 +23,7 @@ func RunAgent() {
 	for i := 0; i < cp; i++ {
 		go worker(i)
 	}
-	select {} // Бесконечное ожидание.
+	select {}
 }
 
 func worker(id int) {
@@ -36,7 +35,6 @@ func worker(id int) {
 			continue
 		}
 		if resp.StatusCode == http.StatusNotFound {
-			// Задач пока нет – ждём.
 			time.Sleep(2 * time.Second)
 			resp.Body.Close()
 			continue
@@ -52,7 +50,6 @@ func worker(id int) {
 		resp.Body.Close()
 		task := data.Task
 		log.Printf("Worker %d: получена задача %+v", id, task)
-		// Имитация задержки выполнения операции.
 		time.Sleep(time.Duration(task.OperationTime) * time.Millisecond)
 		result, err := compute(task.Arg1, task.Arg2, task.Operation)
 		if err != nil {
