@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 func CalculateHandler(w http.ResponseWriter, r *http.Request) {
@@ -37,7 +38,6 @@ func CalculateHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	// Возвращаем статус 200 OK
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		log.Printf("ошибка при отправке ответа: %v", err)
@@ -46,94 +46,110 @@ func CalculateHandler(w http.ResponseWriter, r *http.Request) {
 
 func computeExpression(expression string) (float64, error) {
 	expression = strings.ReplaceAll(expression, " ", "")
-
 	tokens, err := tokenize(expression)
 	if err != nil {
 		return 0, err
 	}
-
 	postfix, err := infixToPostfix(tokens)
 	if err != nil {
 		return 0, err
 	}
-
 	result, err := evaluatePostfix(postfix)
 	if err != nil {
 		return 0, err
 	}
-
 	return result, nil
 }
 
 func tokenize(expression string) ([]string, error) {
 	var tokens []string
-	var currentToken string
+	var currentToken strings.Builder
 
-	for i := 0; i < len(expression); i++ {
-		char := string(expression[i])
-		if isNumber(char) {
-			currentToken += char
-		} else if isOperator(char) {
-			if currentToken != "" {
-				tokens = append(tokens, currentToken)
-				currentToken = ""
-			}
-			tokens = append(tokens, char)
+	for i, char := range expression {
+		if unicode.IsDigit(char) {
+			currentToken.WriteRune(char)
 		} else {
-			return nil, fmt.Errorf("некорректный символ: %s", char)
+			if currentToken.Len() > 0 {
+				tokens = append(tokens, currentToken.String())
+				currentToken.Reset()
+			}
+
+			if char == '-' {
+				if i == 0 || (len(tokens) > 0 && (tokens[len(tokens)-1] == "(" || isOperator(tokens[len(tokens)-1]))) {
+					currentToken.WriteRune(char)
+					continue
+				}
+			}
+
+			if isOperator(string(char)) || char == '(' || char == ')' {
+				tokens = append(tokens, string(char))
+			} else if !unicode.IsSpace(char) {
+				return nil, fmt.Errorf("неизвестный токен: %c", char)
+			}
 		}
 	}
-	if currentToken != "" {
-		tokens = append(tokens, currentToken)
+
+	if currentToken.Len() > 0 {
+		tokens = append(tokens, currentToken.String())
 	}
+
 	return tokens, nil
+}
+
+func isOperator(s string) bool {
+	return s == "+" || s == "-" || s == "*" || s == "/" || s == "^"
 }
 
 func isNumber(char string) bool {
 	return strings.Contains("0123456789.", char)
 }
 
-func isOperator(char string) bool {
-	return strings.Contains("+-*/^", char)
-}
-
 func infixToPostfix(tokens []string) ([]string, error) {
-	var stack []string
 	var output []string
+	var operators []string
+	precedence := map[string]int{
+		"+": 1, "-": 1,
+		"*": 2, "/": 2,
+		"^": 3,
+	}
 	for _, token := range tokens {
 		if isNumber(token) {
 			output = append(output, token)
-		} else if isOperator(token) {
-			for len(stack) > 0 && precedence(stack[len(stack)-1]) >= precedence(token) {
-				output = append(output, stack[len(stack)-1])
-				stack = stack[:len(stack)-1]
+		} else if token == "(" {
+			operators = append(operators, token)
+		} else if token == ")" {
+			for len(operators) > 0 && operators[len(operators)-1] != "(" {
+				output = append(output, operators[len(operators)-1])
+				operators = operators[:len(operators)-1]
 			}
-			stack = append(stack, token)
+			if len(operators) == 0 {
+				return nil, fmt.Errorf("ошибка: несогласованные скобки")
+			}
+			operators = operators[:len(operators)-1]
+		} else if isOperator(token) {
+			for len(operators) > 0 && precedence[operators[len(operators)-1]] >= precedence[token] &&
+				(token != "^" || precedence[operators[len(operators)-1]] > precedence[token]) {
+				output = append(output, operators[len(operators)-1])
+				operators = operators[:len(operators)-1]
+			}
+			operators = append(operators, token)
+		} else {
+			return nil, fmt.Errorf("неизвестный токен: %s", token)
 		}
 	}
-	for len(stack) > 0 {
-		output = append(output, stack[len(stack)-1])
-		stack = stack[:len(stack)-1]
+	for len(operators) > 0 {
+		if operators[len(operators)-1] == "(" {
+			return nil, fmt.Errorf("ошибка: несогласованные скобки")
+		}
+		output = append(output, operators[len(operators)-1])
+		operators = operators[:len(operators)-1]
 	}
 	return output, nil
 }
 
-func precedence(operator string) int {
-	switch operator {
-	case "+", "-":
-		return 1
-	case "*", "/":
-		return 2
-	case "^":
-		return 3
-	default:
-		return 0
-	}
-}
-
-func evaluatePostfix(postfix []string) (float64, error) {
+func evaluatePostfix(tokens []string) (float64, error) {
 	var stack []float64
-	for _, token := range postfix {
+	for _, token := range tokens {
 		if isNumber(token) {
 			num, err := strconv.ParseFloat(token, 64)
 			if err != nil {
@@ -142,38 +158,34 @@ func evaluatePostfix(postfix []string) (float64, error) {
 			stack = append(stack, num)
 		} else if isOperator(token) {
 			if len(stack) < 2 {
-				return 0, fmt.Errorf("недостаточно операндов для оператора %s", token)
+				return 0, fmt.Errorf("ошибка: недостаточно аргументов для операции %s", token)
 			}
 			b := stack[len(stack)-1]
 			a := stack[len(stack)-2]
 			stack = stack[:len(stack)-2]
-			var result float64
+			var res float64
 			switch token {
 			case "+":
-				result = a + b
+				res = a + b
 			case "-":
-				result = a - b
+				res = a - b
 			case "*":
-				result = a * b
+				res = a * b
 			case "/":
 				if b == 0 {
-					return 0, fmt.Errorf("деление на ноль")
+					return 0, fmt.Errorf("ошибка: деление на ноль")
 				}
-				result = a / b
+				res = a / b
 			case "^":
-				result = power(a, b)
-			default:
-				return 0, fmt.Errorf("неизвестный оператор: %s", token)
+				res = math.Pow(a, b)
 			}
-			stack = append(stack, result)
+			stack = append(stack, res)
+		} else {
+			return 0, fmt.Errorf("неизвестный токен: %s", token)
 		}
 	}
 	if len(stack) != 1 {
-		return 0, fmt.Errorf("неверное количество результатов в стеке")
+		return 0, fmt.Errorf("ошибка: неверное количество значений в стеке")
 	}
 	return stack[0], nil
-}
-
-func power(base, exponent float64) float64 {
-	return math.Pow(base, exponent)
 }
