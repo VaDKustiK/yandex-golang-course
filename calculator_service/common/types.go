@@ -20,6 +20,7 @@ type Expression struct {
 type Task struct {
 	ID            int      `json:"id"`
 	ExprID        int      `json:"expr_id"`
+	Expression    string   `json:"expression"`
 	Arg1          float64  `json:"arg1"`
 	Arg2          float64  `json:"arg2"`
 	Operation     string   `json:"operation"`

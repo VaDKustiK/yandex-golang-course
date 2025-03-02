@@ -1,9 +1,9 @@
-package main
+package agent
 
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -39,6 +39,7 @@ func worker(id int) {
 			resp.Body.Close()
 			continue
 		}
+
 		var data struct {
 			Task common.Task `json:"task"`
 		}
@@ -48,14 +49,16 @@ func worker(id int) {
 			continue
 		}
 		resp.Body.Close()
+
 		task := data.Task
 		log.Printf("Worker %d: получена задача %+v", id, task)
-		time.Sleep(time.Duration(task.OperationTime) * time.Millisecond)
-		result, err := compute(task.Arg1, task.Arg2, task.Operation)
+
+		result, err := sendToCalculatorService(task.Expression)
 		if err != nil {
-			log.Printf("Worker %d: ошибка вычисления: %v", id, err)
+			log.Printf("Worker %d: ошибка вычисления выражения: %v", id, err)
 			continue
 		}
+
 		reqData := common.TaskResultRequest{
 			ID:     task.ID,
 			Result: result,
@@ -71,20 +74,32 @@ func worker(id int) {
 	}
 }
 
-func compute(arg1, arg2 float64, op string) (float64, error) {
-	switch op {
-	case "+":
-		return arg1 + arg2, nil
-	case "-":
-		return arg1 - arg2, nil
-	case "*":
-		return arg1 * arg2, nil
-	case "/":
-		if arg2 == 0 {
-			return 0, errors.New("division by zero")
-		}
-		return arg1 / arg2, nil
-	default:
-		return 0, errors.New("unknown operator")
+func sendToCalculatorService(expression string) (float64, error) {
+	reqData := map[string]string{
+		"expression": expression,
 	}
+
+	buf, err := json.Marshal(reqData)
+	if err != nil {
+		return 0, fmt.Errorf("ошибка сериализации данных: %v", err)
+	}
+
+	resp, err := http.Post("http://localhost:8080/api/v1/calculate", "application/json", bytes.NewBuffer(buf))
+	if err != nil {
+		return 0, fmt.Errorf("ошибка отправки запроса в калькулятор: %v", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return 0, fmt.Errorf("получен неожиданный статус от калькулятора: %v", resp.StatusCode)
+	}
+
+	var result struct {
+		Result float64 `json:"result"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return 0, fmt.Errorf("ошибка декодирования результата: %v", err)
+	}
+
+	return result.Result, nil
 }

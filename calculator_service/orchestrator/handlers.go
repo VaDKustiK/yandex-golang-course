@@ -1,4 +1,4 @@
-package main
+package orchestrator
 
 import (
 	"encoding/json"
@@ -76,6 +76,7 @@ func AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
 		task := &common.Task{
 			ID:            nextTaskID,
 			ExprID:        exprID,
+			Expression:    exprStr,
 			Arg1:          numbers[i],
 			Arg2:          numbers[i+1],
 			Operation:     op,

@@ -1,4 +1,4 @@
-package main
+package orchestrator
 
 import (
 	"log"
@@ -7,7 +7,6 @@ import (
 )
 
 func main() {
-	//эндпоинты  в handlers.go.
 	http.HandleFunc("/api/v1/calculate", AddExpressionHandler)
 	http.HandleFunc("/api/v1/expressions", ListExpressionsHandler)
 	http.HandleFunc("/api/v1/expressions/", GetExpressionHandler)
