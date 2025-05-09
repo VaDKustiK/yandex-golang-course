@@ -1,3 +1,4 @@
+// pkg/orchestrator/handlers.go
 package orchestrator
 
 import (
@@ -6,62 +7,52 @@ import (
 	"os"
 	"strconv"
 	"strings"
-	"sync"
 
 	"github.com/VaDKustiK/yandex-golang-course/calculator_service/pkg/common"
-)
-
-var (
-	expressionsMu sync.Mutex
-	tasksMu       sync.Mutex
-
-	expressions = make(map[int]*common.Expression)
-	tasks       = make(map[int]*common.Task)
-
-	nextExprID = 1
-	nextTaskID = 1
+	"gorm.io/gorm"
 )
 
 func AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
-		http.Error(w, `{"error": "method not allowed"}`, http.StatusMethodNotAllowed)
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 		return
 	}
 	var req common.CalcRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error": "invalid request body"}`, http.StatusBadRequest)
+		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 		return
 	}
 	exprStr := strings.TrimSpace(req.Expression)
 	if exprStr == "" {
-		http.Error(w, `{"error": "empty expression"}`, http.StatusUnprocessableEntity)
+		http.Error(w, `{"error":"empty expression"}`, http.StatusUnprocessableEntity)
 		return
 	}
 
-	expressionsMu.Lock()
-	exprID := nextExprID
-	nextExprID++
+	db := GetDB()
+	userID := UserIDFromContext(r.Context())
 	expr := &common.Expression{
-		ID:         exprID,
 		Expression: exprStr,
 		Status:     "pending",
-		TaskIDs:    []int{},
+		UserID:     userID,
 	}
-	expressions[exprID] = expr
-	expressionsMu.Unlock()
+	if err := db.Create(expr).Error; err != nil {
+		http.Error(w, `{"error":"cannot save expression"}`, http.StatusInternalServerError)
+		return
+	}
 
 	tokens := common.Tokenize(exprStr)
 	if len(tokens) < 3 {
-		http.Error(w, `{"error": "expression is too short"}`, http.StatusUnprocessableEntity)
+		http.Error(w, `{"error":"expression is too short"}`, http.StatusUnprocessableEntity)
 		return
 	}
+
 	var numbers []float64
 	var ops []string
 	for i, token := range tokens {
 		if i%2 == 0 {
 			num, err := strconv.ParseFloat(token, 64)
 			if err != nil {
-				http.Error(w, `{"error": "invalid number in expression"}`, http.StatusUnprocessableEntity)
+				http.Error(w, `{"error":"invalid number in expression"}`, http.StatusUnprocessableEntity)
 				return
 			}
 			numbers = append(numbers, num)
@@ -70,139 +61,162 @@ func AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	tasksMu.Lock()
 	for i, op := range ops {
-		opTime := getOperationTime(op)
 		task := &common.Task{
-			ID:            nextTaskID,
-			ExprID:        exprID,
+			ExprID:        expr.ID,
 			Expression:    exprStr,
 			Arg1:          numbers[i],
 			Arg2:          numbers[i+1],
 			Operation:     op,
 			Status:        "pending",
-			OperationTime: opTime,
+			OperationTime: getOperationTime(op),
 		}
-		nextTaskID++
-		tasks[task.ID] = task
-		expr.TaskIDs = append(expr.TaskIDs, task.ID)
+		if err := db.Create(task).Error; err != nil {
+			http.Error(w, `{"error":"cannot save task"}`, http.StatusInternalServerError)
+			return
+		}
 	}
-	tasksMu.Unlock()
 
-	expressionsMu.Lock()
-	expr.Status = "in_progress"
-	expressionsMu.Unlock()
+	if err := db.Model(expr).Update("status", "in_progress").Error; err != nil {
+		http.Error(w, `{"error":"cannot update status"}`, http.StatusInternalServerError)
+		return
+	}
 
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]int{"id": exprID})
+	json.NewEncoder(w).Encode(map[string]uint{"id": expr.ID})
 }
 
 func ListExpressionsHandler(w http.ResponseWriter, r *http.Request) {
-	expressionsMu.Lock()
-	defer expressionsMu.Unlock()
-	var list []common.Expression
-	for _, expr := range expressions {
+	db := GetDB()
+	var exprs []common.Expression
+	userID := UserIDFromContext(r.Context())
+	if err := db.
+		Where("user_id = ?", userID).
+		Preload("Tasks").
+		Find(&exprs).
+		Error; err != nil {
+		http.Error(w, `{"error":"cannot list expressions"}`, http.StatusInternalServerError)
+		return
+	}
+	if err := db.Preload("Tasks").Find(&exprs).Error; err != nil {
+		http.Error(w, `{"error":"cannot list expressions"}`, http.StatusInternalServerError)
+		return
+	}
+
+	for i := range exprs {
+		expr := &exprs[i]
 		if expr.Status != "completed" {
 			allDone := true
 			var final float64
-			tasksMu.Lock()
-			for _, tid := range expr.TaskIDs {
-				task, ok := tasks[tid]
-				if !ok || task.Status != "completed" || task.Result == nil {
+			for _, t := range expr.Tasks {
+				if t.Status != "completed" || t.Result == nil {
 					allDone = false
 					break
 				}
-				final = *task.Result
+				final = *t.Result
 			}
-			tasksMu.Unlock()
 			if allDone {
 				expr.Status = "completed"
 				expr.Result = &final
+				db.Model(expr).Updates(map[string]interface{}{
+					"status": "completed",
+					"result": final,
+				})
 			}
 		}
-		list = append(list, *expr)
 	}
-	json.NewEncoder(w).Encode(map[string][]common.Expression{"expressions": list})
+
+	json.NewEncoder(w).Encode(map[string][]common.Expression{"expressions": exprs})
 }
 
 func GetExpressionHandler(w http.ResponseWriter, r *http.Request) {
 	idStr := strings.TrimPrefix(r.URL.Path, "/api/v1/expressions/")
-	exprID, err := strconv.Atoi(idStr)
+	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		http.Error(w, `{"error": "invalid id"}`, http.StatusBadRequest)
+		http.Error(w, `{"error":"invalid id"}`, http.StatusBadRequest)
 		return
 	}
-	expressionsMu.Lock()
-	expr, ok := expressions[exprID]
-	expressionsMu.Unlock()
-	if !ok {
-		http.Error(w, `{"error": "expression not found"}`, http.StatusNotFound)
+
+	expr, err := getExpressionByID(uint(id))
+	if err == gorm.ErrRecordNotFound {
+		http.Error(w, `{"error":"expression not found"}`, http.StatusNotFound)
+		return
+	} else if err != nil {
+		http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		return
 	}
+
 	if expr.Status != "completed" {
 		allDone := true
 		var final float64
-		tasksMu.Lock()
-		for _, tid := range expr.TaskIDs {
-			task, ok := tasks[tid]
-			if !ok || task.Status != "completed" || task.Result == nil {
+		for _, t := range expr.Tasks {
+			if t.Status != "completed" || t.Result == nil {
 				allDone = false
 				break
 			}
-			final = *task.Result
+			final = *t.Result
 		}
-		tasksMu.Unlock()
 		if allDone {
 			expr.Status = "completed"
 			expr.Result = &final
+			GetDB().Model(expr).Updates(map[string]interface{}{
+				"status": "completed",
+				"result": final,
+			})
 		}
 	}
+
 	json.NewEncoder(w).Encode(map[string]*common.Expression{"expression": expr})
 }
 
 func InternalTaskHandler(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet {
+	switch r.Method {
+	case http.MethodGet:
 		getTask(w, r)
-	} else if r.Method == http.MethodPost {
+	case http.MethodPost:
 		postTaskResult(w, r)
-	} else {
-		http.Error(w, `{"error": "method not allowed"}`, http.StatusMethodNotAllowed)
+	default:
+		http.Error(w, `{"error":"method not allowed"}`, http.StatusMethodNotAllowed)
 	}
 }
 
 func getTask(w http.ResponseWriter, r *http.Request) {
-	tasksMu.Lock()
-	defer tasksMu.Unlock()
-	for _, task := range tasks {
-		if task.Status == "pending" {
-			json.NewEncoder(w).Encode(map[string]*common.Task{"task": task})
-			return
+	db := GetDB()
+	var task common.Task
+	if err := db.Where("status = ?", "pending").First(&task).Error; err != nil {
+		if err == gorm.ErrRecordNotFound {
+			http.Error(w, `{"error":"no task"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 		}
+		return
 	}
-	http.Error(w, `{"error": "no task"}`, http.StatusNotFound)
+	json.NewEncoder(w).Encode(map[string]common.Task{"task": task})
 }
 
 func postTaskResult(w http.ResponseWriter, r *http.Request) {
 	var req common.TaskResultRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, `{"error": "invalid request body"}`, http.StatusBadRequest)
+		http.Error(w, `{"error":"invalid request body"}`, http.StatusBadRequest)
 		return
 	}
-	tasksMu.Lock()
-	task, ok := tasks[req.ID]
-	if !ok {
-		tasksMu.Unlock()
-		http.Error(w, `{"error": "task not found"}`, http.StatusNotFound)
+	db := GetDB()
+	var task common.Task
+	if err := db.First(&task, req.ID).Error; err != nil {
+		http.Error(w, `{"error":"task not found"}`, http.StatusNotFound)
 		return
 	}
 	if task.Status != "pending" {
-		tasksMu.Unlock()
-		http.Error(w, `{"error": "task already completed"}`, http.StatusUnprocessableEntity)
+		http.Error(w, `{"error":"task already completed"}`, http.StatusUnprocessableEntity)
 		return
 	}
-	task.Result = &req.Result
-	task.Status = "completed"
-	tasksMu.Unlock()
+	if err := db.Model(&task).Updates(map[string]interface{}{
+		"status": "completed",
+		"result": req.Result,
+	}).Error; err != nil {
+		http.Error(w, `{"error":"cannot update task"}`, http.StatusInternalServerError)
+		return
+	}
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -220,10 +234,8 @@ func getOperationTime(op string) int {
 	default:
 		return 100
 	}
-	msStr := os.Getenv(envVar)
-	ms, err := strconv.Atoi(msStr)
-	if err != nil {
-		return 100
+	if ms, err := strconv.Atoi(os.Getenv(envVar)); err == nil {
+		return ms
 	}
-	return ms
+	return 100
 }

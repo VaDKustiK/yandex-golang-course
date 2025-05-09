@@ -1,5 +1,9 @@
 package common
 
+import (
+	"gorm.io/gorm"
+)
+
 type CalcRequest struct {
 	Expression string `json:"expression"`
 }
@@ -10,16 +14,17 @@ type CalcResponse struct {
 }
 
 type Expression struct {
-	ID         int      `json:"id"`
+	gorm.Model
 	Expression string   `json:"expression"`
 	Status     string   `json:"status"`
 	Result     *float64 `json:"result,omitempty"`
-	TaskIDs    []int    `json:"-"`
+	UserID     uint     `json:"-"`
+	Tasks      []Task   `gorm:"foreignKey:ExprID"`
 }
 
 type Task struct {
-	ID            int      `json:"id"`
-	ExprID        int      `json:"expr_id"`
+	gorm.Model
+	ExprID        uint     `json:"expr_id"`
 	Expression    string   `json:"expression"`
 	Arg1          float64  `json:"arg1"`
 	Arg2          float64  `json:"arg2"`
@@ -30,6 +35,12 @@ type Task struct {
 }
 
 type TaskResultRequest struct {
-	ID     int     `json:"id"`
+	ID     uint    `json:"id"`
 	Result float64 `json:"result"`
+}
+
+type User struct {
+	gorm.Model
+	Login    string `gorm:"uniqueIndex"`
+	Password string
 }

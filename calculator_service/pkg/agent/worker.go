@@ -35,8 +35,8 @@ func worker(id int) {
 			continue
 		}
 		if resp.StatusCode == http.StatusNotFound {
-			time.Sleep(2 * time.Second)
 			resp.Body.Close()
+			time.Sleep(2 * time.Second)
 			continue
 		}
 
