@@ -5,28 +5,26 @@ import (
 	"unicode"
 )
 
+// Tokenize разбивает выражение на токены.
 func Tokenize(expression string) []string {
 	var tokens []string
-	var numBuffer strings.Builder
+	var buf strings.Builder
 
-	for _, char := range expression {
-		if unicode.IsDigit(char) || char == '.' {
-			numBuffer.WriteRune(char)
-		} else if char == ' ' {
-			if numBuffer.Len() > 0 {
-				tokens = append(tokens, numBuffer.String())
-				numBuffer.Reset()
-			}
+	for _, r := range expression {
+		if unicode.IsDigit(r) || r == '.' {
+			buf.WriteRune(r)
 		} else {
-			if numBuffer.Len() > 0 {
-				tokens = append(tokens, numBuffer.String())
-				numBuffer.Reset()
+			if buf.Len() > 0 {
+				tokens = append(tokens, buf.String())
+				buf.Reset()
 			}
-			tokens = append(tokens, string(char))
+			if !unicode.IsSpace(r) {
+				tokens = append(tokens, string(r))
+			}
 		}
 	}
-	if numBuffer.Len() > 0 {
-		tokens = append(tokens, numBuffer.String())
+	if buf.Len() > 0 {
+		tokens = append(tokens, buf.String())
 	}
 	return tokens
 }

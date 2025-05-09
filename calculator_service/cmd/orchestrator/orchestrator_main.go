@@ -4,13 +4,15 @@ import (
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/VaDKustiK/yandex-golang-course/calculator_service/pkg/orchestrator"
 )
 
 func main() {
-	http.HandleFunc("/api/v1/calculate", AddExpressionHandler)
-	http.HandleFunc("/api/v1/expressions", ListExpressionsHandler)
-	http.HandleFunc("/api/v1/expressions/", GetExpressionHandler)
-	http.HandleFunc("/internal/task", InternalTaskHandler)
+	http.HandleFunc("/api/v1/calculate", orchestrator.AddExpressionHandler)
+	http.HandleFunc("/api/v1/expressions", orchestrator.ListExpressionsHandler)
+	http.HandleFunc("/api/v1/expressions/", orchestrator.GetExpressionHandler)
+	http.HandleFunc("/internal/task", orchestrator.InternalTaskHandler)
 
 	port := os.Getenv("PORT")
 	if port == "" {

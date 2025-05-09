@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/VaDKustiK/yandex-golang-course/calculator_service/common"
+	"github.com/VaDKustiK/yandex-golang-course/calculator_service/pkg/common"
 )
 
 func RunAgent() {

@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/VaDKustiK/yandex-golang-course/calculator_service/common"
+	"github.com/VaDKustiK/yandex-golang-course/calculator_service/pkg/common"
 )
 
 var (
