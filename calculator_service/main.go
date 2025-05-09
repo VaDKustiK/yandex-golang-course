@@ -5,8 +5,8 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/VaDKustiK/yandex-golang-course/calculator_service/agent"
-	"github.com/VaDKustiK/yandex-golang-course/calculator_service/orchestrator"
+	"github.com/VaDKustiK/yandex-golang-course/calculator_service/cmd/agent"
+	"github.com/VaDKustiK/yandex-golang-course/calculator_service/cmd/orchestrator"
 )
 
 func main() {
