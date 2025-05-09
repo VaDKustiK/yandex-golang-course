@@ -17,8 +17,8 @@ func GetDB() *gorm.DB {
 
 func getExpressionByID(id uint) (*common.Expression, error) {
 	var expr common.Expression
-	if err := db.Preload("Tasks").First(&expr, id).Error; err != nil {
-		return nil, err
-	}
-	return &expr, nil
+	err := db.Preload("Tasks").
+		Where("id = ?", id).
+		First(&expr).Error
+	return &expr, err
 }

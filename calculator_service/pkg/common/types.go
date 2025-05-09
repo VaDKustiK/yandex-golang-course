@@ -1,9 +1,5 @@
 package common
 
-import (
-	"gorm.io/gorm"
-)
-
 type CalcRequest struct {
 	Expression string `json:"expression"`
 }
@@ -14,18 +10,29 @@ type CalcResponse struct {
 }
 
 type Expression struct {
-	gorm.Model
-	Expression string   `json:"expression"`
-	Status     string   `json:"status"`
+	ID         uint     `gorm:"primaryKey" json:"id"`
+	UserID     uint     `gorm:"index;not null" json:"-"`
+	Expression string   `gorm:"not null" json:"expression"`
+	Status     string   `gorm:"not null" json:"status"`
 	Result     *float64 `json:"result,omitempty"`
-	UserID     uint     `json:"-"`
 	Tasks      []Task   `gorm:"foreignKey:ExprID"`
 }
 
+// type Task struct {
+// 	gorm.Model
+// 	ExprID        uint     `json:"expr_id"`
+// 	Expression    string   `json:"expression"`
+// 	Arg1          float64  `json:"arg1"`
+// 	Arg2          float64  `json:"arg2"`
+// 	Operation     string   `json:"operation"`
+// 	Result        *float64 `json:"result,omitempty"`
+// 	Status        string   `json:"status"`
+// 	OperationTime int      `json:"operation_time"`
+// }
+
 type Task struct {
-	gorm.Model
-	ExprID        uint     `json:"expr_id"`
-	Expression    string   `json:"expression"`
+	ID            uint     `gorm:"primaryKey" json:"id"`
+	ExprID        uint     `gorm:"index;not null" json:"expr_id"`
 	Arg1          float64  `json:"arg1"`
 	Arg2          float64  `json:"arg2"`
 	Operation     string   `json:"operation"`
@@ -40,7 +47,7 @@ type TaskResultRequest struct {
 }
 
 type User struct {
-	gorm.Model
-	Login    string `gorm:"uniqueIndex"`
-	Password string
+	ID       uint   `gorm:"primaryKey"`
+	Login    string `gorm:"uniqueIndex;not null"`
+	Password string `gorm:"not null"`
 }

@@ -30,10 +30,11 @@ func AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
 
 	db := GetDB()
 	userID := UserIDFromContext(r.Context())
+
 	expr := &common.Expression{
+		UserID:     userID,
 		Expression: exprStr,
 		Status:     "pending",
-		UserID:     userID,
 	}
 	if err := db.Create(expr).Error; err != nil {
 		http.Error(w, `{"error":"cannot save expression"}`, http.StatusInternalServerError)
@@ -41,30 +42,19 @@ func AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tokens := common.Tokenize(exprStr)
-	if len(tokens) < 3 {
-		http.Error(w, `{"error":"expression is too short"}`, http.StatusUnprocessableEntity)
-		return
-	}
-
 	var numbers []float64
 	var ops []string
-	for i, token := range tokens {
+	for i, t := range tokens {
 		if i%2 == 0 {
-			num, err := strconv.ParseFloat(token, 64)
-			if err != nil {
-				http.Error(w, `{"error":"invalid number in expression"}`, http.StatusUnprocessableEntity)
-				return
-			}
+			num, _ := strconv.ParseFloat(t, 64)
 			numbers = append(numbers, num)
 		} else {
-			ops = append(ops, token)
+			ops = append(ops, t)
 		}
 	}
-
 	for i, op := range ops {
 		task := &common.Task{
 			ExprID:        expr.ID,
-			Expression:    exprStr,
 			Arg1:          numbers[i],
 			Arg2:          numbers[i+1],
 			Operation:     op,
@@ -77,10 +67,7 @@ func AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if err := db.Model(expr).Update("status", "in_progress").Error; err != nil {
-		http.Error(w, `{"error":"cannot update status"}`, http.StatusInternalServerError)
-		return
-	}
+	db.Model(expr).Update("status", "in_progress")
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]uint{"id": expr.ID})
@@ -88,17 +75,14 @@ func AddExpressionHandler(w http.ResponseWriter, r *http.Request) {
 
 func ListExpressionsHandler(w http.ResponseWriter, r *http.Request) {
 	db := GetDB()
-	var exprs []common.Expression
 	userID := UserIDFromContext(r.Context())
+
+	var exprs []common.Expression
 	if err := db.
 		Where("user_id = ?", userID).
 		Preload("Tasks").
 		Find(&exprs).
 		Error; err != nil {
-		http.Error(w, `{"error":"cannot list expressions"}`, http.StatusInternalServerError)
-		return
-	}
-	if err := db.Preload("Tasks").Find(&exprs).Error; err != nil {
 		http.Error(w, `{"error":"cannot list expressions"}`, http.StatusInternalServerError)
 		return
 	}
@@ -136,7 +120,6 @@ func GetExpressionHandler(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"invalid id"}`, http.StatusBadRequest)
 		return
 	}
-
 	expr, err := getExpressionByID(uint(id))
 	if err == gorm.ErrRecordNotFound {
 		http.Error(w, `{"error":"expression not found"}`, http.StatusNotFound)
@@ -183,7 +166,10 @@ func InternalTaskHandler(w http.ResponseWriter, r *http.Request) {
 func getTask(w http.ResponseWriter, r *http.Request) {
 	db := GetDB()
 	var task common.Task
-	if err := db.Where("status = ?", "pending").First(&task).Error; err != nil {
+	if err := db.
+		Where("status = ?", "pending").
+		Order("id").
+		First(&task).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
 			http.Error(w, `{"error":"no task"}`, http.StatusNotFound)
 		} else {
@@ -210,13 +196,10 @@ func postTaskResult(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"task already completed"}`, http.StatusUnprocessableEntity)
 		return
 	}
-	if err := db.Model(&task).Updates(map[string]interface{}{
+	db.Model(&task).Updates(map[string]interface{}{
 		"status": "completed",
 		"result": req.Result,
-	}).Error; err != nil {
-		http.Error(w, `{"error":"cannot update task"}`, http.StatusInternalServerError)
-		return
-	}
+	})
 	w.WriteHeader(http.StatusOK)
 }
 

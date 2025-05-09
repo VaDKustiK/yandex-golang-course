@@ -26,6 +26,24 @@ func RunAgent() {
 	select {}
 }
 
+func computeOp(a, b float64, op string) (float64, error) {
+	switch op {
+	case "+":
+		return a + b, nil
+	case "-":
+		return a - b, nil
+	case "*":
+		return a * b, nil
+	case "/":
+		if b == 0 {
+			return 0, fmt.Errorf("division by zero")
+		}
+		return a / b, nil
+	default:
+		return 0, fmt.Errorf("unknown op %q", op)
+	}
+}
+
 func worker(id int) {
 	for {
 		resp, err := http.Get("http://localhost:8080/internal/task")
@@ -53,7 +71,7 @@ func worker(id int) {
 		task := data.Task
 		log.Printf("Worker %d: получена задача %+v", id, task)
 
-		result, err := sendToCalculatorService(task.Expression)
+		result, err := computeOp(task.Arg1, task.Arg2, task.Operation)
 		if err != nil {
 			log.Printf("Worker %d: ошибка вычисления выражения: %v", id, err)
 			continue

@@ -2,14 +2,34 @@ package main
 
 import (
 	"log"
+	"net"
 	"net/http"
 	"os"
 
 	"github.com/VaDKustiK/yandex-golang-course/calculator_service/pkg/agent"
 	"github.com/VaDKustiK/yandex-golang-course/calculator_service/pkg/orchestrator"
+	pb "github.com/VaDKustiK/yandex-golang-course/calculator_service/pkg/orchestrator/rpc"
+
+	"google.golang.org/grpc"
 )
 
 func main() {
+	// gRPC server
+	go func() {
+		lis, err := net.Listen("tcp", ":9090")
+		if err != nil {
+			log.Fatalf("failed to listen: %v", err)
+		}
+		grpcServer := grpc.NewServer()
+		pb.RegisterOrchestratorServer(grpcServer, orchestrator.NewGRPCServer())
+
+		log.Println("gRPC server listening on :9090")
+		if err := grpcServer.Serve(lis); err != nil {
+			log.Fatalf("gRPC serve error: %v", err)
+		}
+	}()
+
+	// HTTP server
 	go func() {
 		mux := http.NewServeMux()
 
@@ -25,7 +45,7 @@ func main() {
 		if port == "" {
 			port = "8080"
 		}
-		log.Printf("Сервер запущен на http://localhost:%s\n", port)
+		log.Printf("HTTP сервер запущен на http://localhost:%s\n", port)
 		if err := http.ListenAndServe(":"+port, mux); err != nil {
 			log.Fatal("Ошибка при запуске сервера:", err)
 		}
