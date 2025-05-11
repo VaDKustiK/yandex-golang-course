@@ -20,13 +20,13 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to open DB: %v", err)
 	}
-
 	if err := db.AutoMigrate(&common.User{}, &common.Expression{}, &common.Task{}); err != nil {
 		log.Fatalf("auto-migrate failed: %v", err)
 	}
 	orchestrator.SetDB(db)
 
 	mux := http.NewServeMux()
+
 	mux.HandleFunc("/api/v1/register", orchestrator.RegisterHandler)
 	mux.HandleFunc("/api/v1/login", orchestrator.LoginHandler)
 
@@ -36,7 +36,8 @@ func main() {
 	mux.Handle("/api/v1/calculate", protected(orchestrator.AddExpressionHandler))
 	mux.Handle("/api/v1/expressions", protected(orchestrator.ListExpressionsHandler))
 	mux.Handle("/api/v1/expressions/", protected(orchestrator.GetExpressionHandler))
-	mux.Handle("/internal/task", protected(orchestrator.InternalTaskHandler))
+
+	mux.HandleFunc("/internal/task", orchestrator.InternalTaskHandler)
 
 	go func() {
 		addr := ":" + getenv("PORT", "8080")
