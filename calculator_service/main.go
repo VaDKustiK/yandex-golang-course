@@ -43,7 +43,7 @@ func main() {
 		if port == "" {
 			port = "8080"
 		}
-		log.Printf("HTTP ↦ :%s", port)
+		log.Printf("HTTP -> :%s", port)
 		log.Fatal(http.ListenAndServe(":"+port, mux))
 	}()
 
@@ -54,7 +54,7 @@ func main() {
 	grpcServer := grpc.NewServer()
 	pb.RegisterOrchestratorServer(grpcServer, orchestrator.NewGRPCServer())
 	go func() {
-		log.Println("gRPC ↦ :9090")
+		log.Println("gRPC -> :9090")
 		log.Fatal(grpcServer.Serve(lis))
 	}()
 
